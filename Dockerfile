@@ -79,14 +79,13 @@ RUN  case "$(dpkg --print-architecture)" in \
     esac
 RUN echo 'export PATH="$PATH:/opt/ngc-cli"' >> ~/.bashrc
 
-# gcloud
-# @see https://cloud.google.com/sdk/docs/install
-RUN apt-get install -yq apt-transport-https ca-certificates gnupg
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-RUN apt-get update && apt-get install -yq google-cloud-cli
-RUN mkdir -p /root/.config && ln -s /app/state/.gcp /root/.config/gcloud
-RUN echo "mkdir -p /app/state/.gcp" >> /root/.bashrc
+# gcloud - skipping due to network issues
+# RUN apt-get install -yq apt-transport-https ca-certificates gnupg
+# RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+# RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+# RUN apt-get update && apt-get install -yq google-cloud-cli
+# RUN mkdir -p /root/.config && ln -s /app/state/.gcp /root/.config/gcloud
+# RUN echo "mkdir -p /app/state/.gcp" >> /root/.bashrc
 
 # alibaba cloud cli
 # @see https://github.com/aliyun/aliyun-cli#installation
