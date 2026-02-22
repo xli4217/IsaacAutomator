@@ -12,7 +12,7 @@ HEADLESS="${HEADLESS:---headless}"
 VIDEO="${VIDEO:---video}"
 VIDEO_LENGTH="${VIDEO_LENGTH:-200}"
 VIDEO_INTERVAL="${VIDEO_INTERVAL:-2000}"
-MAX_ITERATIONS="${MAX_ITERATIONS:-500}"
+MAX_ITERATIONS="${MAX_ITERATIONS:-5}"
 VIDEO_DIR="${VIDEO_DIR:-/results/videos/train}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-nvcr.io/nvidia/isaac-lab:2.3.0}"
 
@@ -116,16 +116,21 @@ echo ""
 
 # Run Isaac Lab training container
 # Note: ACCEPT_EULA is required for NVIDIA Isaac Lab container
+# Note: Using explicit device mapping as --gpus flag has issues on 2-5880
 docker run --rm \
-    --gpus "device=$CUDA_DEVICE" \
     --runtime=nvidia \
+    --device /dev/nvidia0:/dev/nvidia0 \
+    --device /dev/nvidia1:/dev/nvidia1 \
+    --device /dev/nvidiactl:/dev/nvidiactl \
+    --device /dev/nvidia-modeset:/dev/nvidia-modeset \
+    --device /dev/nvidia-uvm:/dev/nvidia-uvm \
     -e ACCEPT_EULA=Y \
     -e CUDA_VISIBLE_DEVICES="$CUDA_DEVICE" \
     -e OMNI_ENV_PRIVACY_CONSENT=1 \
     -v "$(pwd)/results:/results" \
-    -w /isaaclab \
+    -w /workspace/isaaclab \
     "$CONTAINER_IMAGE" \
-    python /isaaclab/scripts/reinforcement_learning/sb3/train.py \
+    python /workspace/isaaclab/scripts/reinforcement_learning/sb3/train.py \
         --task "$TASK" \
         $HEADLESS \
         --enable_cameras \

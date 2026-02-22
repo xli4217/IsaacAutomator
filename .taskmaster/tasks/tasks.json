@@ -6,124 +6,124 @@
         "title": "Transfer Isaac Automator Image to Remote Machine",
         "description": "Export the pre-built isaac_automater image from 8-5880 and import it on target machine 2-5880 to enable container orchestration capabilities.",
         "details": "On source machine (8-5880): Run `docker save isaac_automater:latest | gzip > isaac_automater.tar.gz`. Transfer via SCP: `scp isaac_automater.tar.gz xli4217@2-5880:/tmp/`. On target (2-5880): Run `gunzip -c /tmp/isaac_automater.tar.gz | docker load`. Verify with `docker images | grep isaac_automater`. Ensure sufficient disk space (>10GB) for the image layers.",
-        "testStrategy": "Execute `docker images` on 2-5880 and confirm isaac_automater image is listed with correct tag and size. Run `docker run --rm isaac_automater:latest echo 'Image transfer successful'` to verify container execution.",
+        "testStrategy": "VERIFIED 2026-02-22: COMPLETE - User confirmed isaac_automater image exists on 2-5880. Verify with: ssh xli4217@2-5880 'docker images | grep isaac_automater' then test: ssh xli4217@2-5880 'docker run --rm isaac_automater echo Image transfer successful'",
         "priority": "high",
         "dependencies": [],
         "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-02-21T14:56:48.464Z"
+        "updatedAt": "2026-02-22T08:28:30.767Z"
       },
       {
         "id": "2",
         "title": "Configure GPU-enabled Docker Runtime on Remote Machine",
         "description": "Verify and configure nvidia-docker2 runtime on 2-5880 to enable GPU access within containers, ensuring CUDA drivers are accessible to Isaac Lab.",
         "details": "Verify nvidia-docker2 installation: `docker info | grep nvidia`. Test GPU access: `docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi`. If missing, install nvidia-container-toolkit and restart docker daemon. Configure default runtime in /etc/docker/daemon.json if necessary. Ensure user xli4217 is in docker group.",
-        "testStrategy": "Execute `docker run --rm --gpus all nvcr.io/nvidia/isaac-lab:2.3.1 nvidia-smi` and verify GPU information displays correctly. Check that CUDA version matches host capabilities (12.x recommended for Isaac Lab 2.3.1).",
+        "testStrategy": "VERIFIED 2026-02-22: COMPLETE with workaround. Host has 2x RTX 5880 with Driver 570.181. `docker info` shows 'nvidia runc'. Original --gpus all failed with NVML error. FIX FOUND: Use explicit device mapping instead of --gpus: `--device /dev/nvidia0:/dev/nvidia0 --device /dev/nvidia1:/dev/nvidia1 --device /dev/nvidiactl:/dev/nvidiactl --device /dev/nvidia-modeset:/dev/nvidia-modeset --device /dev/nvidia-uvm:/dev/nvidia-uvm`. Or use --runtime=nvidia with these devices.",
         "priority": "high",
         "dependencies": [
           "1"
         ],
         "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:27:47.603Z"
+        "updatedAt": "2026-02-22T08:59:21.834Z"
       },
       {
         "id": "3",
         "title": "Create autorun.sh Training Automation Script",
         "description": "Develop the automation script that executes Isaac Lab training with specified parameters for headless operation and video recording.",
-        "details": "Create script at `/isaaclab/autorun.sh` inside container context:\n```bash\n#!/bin/bash\nset -e\nexport CUDA_VISIBLE_DEVICES=0\nexport DISPLAY=:0\n\npython /isaaclab/scripts/reinforcement_learning/sb3/train.py \\\n  --task Isaac-Cartpole-v0 \\\n  --headless \\\n  --enable_cameras \\\n  --video \\\n  --video_length 200 \\\n  --video_interval 2000 \\\n  --max_iterations 500 \\\n  --video_dir /results/videos/train\n\necho \"Training completed successfully\"\n```\nMake executable: `chmod +x /isaaclab/autorun.sh`. Ensure script handles signal termination (SIGTERM) gracefully for clean shutdown.",
-        "testStrategy": "Run script without GPU first to verify argument parsing: `docker run --rm isaac_automater /isaaclab/autorun.sh --help` or dry-run mode. Verify all required flags are accepted by the train.py parser without 'unrecognized arguments' errors.",
+        "details": "Create script at `/workspace/isaaclab/autorun.sh` inside container context:\n```bash\n#!/bin/bash\nset -e\n\n# Run Isaac Lab training with GPU and video recording\n# Use explicit device mapping (--gpus fails on 2-5880)\ndocker run --rm --runtime=nvidia \\\n  --device /dev/nvidia0:/dev/nvidia0 \\\n  --device /dev/nvidia1:/dev/nvidia1 \\\n  --device /dev/nvidiactl:/dev/nvidiactl \\\n  --device /dev/nvidia-modeset:/dev/nvidia-modeset \\\n  --device /dev/nvidia-uvm:/dev/nvidia-uvm \\\n  -e ACCEPT_EULA=Y \\\n  -e OMNI_ENV_PRIVACY_CONSENT=1 \\\n  -v /home/xli4217/IsaacAutomator/results:/results \\\n  -w /workspace/isaaclab \\\n  nvcr.io/nvidia/isaac-lab:2.3.0 \\\n  /workspace/isaaclab/isaaclab.sh -p \\\n  /workspace/isaaclab/scripts/reinforcement_learning/sb3/train.py \\\n  --task Isaac-Cartpole-v0 \\\n  --headless \\\n  --enable_cameras \\\n  --video \\\n  --video_length 200 \\\n  --video_interval 2000 \\\n  --max_iterations 5 \\\n  --num_envs 64\n\n# Videos saved to: logs/sb3/Isaac-Cartpole-v0/videos (default)\n# NOT /results/videos/train (--video_dir flag not working)\n```\nMake executable: `chmod +x /workspace/isaaclab/autorun.sh`.",
+        "testStrategy": "VERIFIED 2026-02-22: IN PROGRESS - Multiple issues found and fixed. \n\nFINDINGS:\n1. Path fixed: Scripts at /workspace/isaaclab/scripts/reinforcement_learning/sb3/train.py (NOT /isaaclab/)\n2. Must use wrapper: /workspace/isaaclab/isaaclab.sh -p <script> (not direct python)\n3. GPU access: Use explicit device mapping (--device /dev/nvidia0:/dev/nvidia0 etc) instead of --gpus\n4. Video dir: Default is logs/sb3/<task>/videos, NOT /results/videos/train (--video_dir may not work)\n5. Default num_envs is very high (4096) - may need --num_envs 64 for faster testing\n\nUPDATES MADE:\n- scripts/autorun.sh: Changed to /workspace/isaaclab paths\n- Changed default MAX_ITERATIONS to 5\n- Added explicit GPU device mapping for 2-5880\n- Changed working dir to /workspace/isaaclab\n\nNEXT: Run with correct video output path or mount logs directory",
         "priority": "high",
         "dependencies": [
           "2"
         ],
-        "status": "done",
+        "status": "in-progress",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:30:09.256Z"
+        "updatedAt": "2026-02-22T09:05:48.978Z"
       },
       {
         "id": "4",
         "title": "Setup Results Directory Structure and Permissions",
         "description": "Create the /results directory hierarchy with appropriate permissions for video output storage, ensuring persistence across container restarts.",
         "details": "In Dockerfile or entrypoint: `mkdir -p /results/videos/train /results/logs /results/checkpoints && chmod -R 777 /results`. Create Docker volume mount point: `VOLUME [\"/results\"]`. Ensure the directory is writable by non-root users (Isaac Lab typically runs as user). Set up bind mount from host to container: `-v $(pwd)/results:/results` in run command.",
-        "testStrategy": "Execute `docker run --rm -v /tmp/test_results:/results isaac_automater touch /results/videos/train/test.mp4` and verify file appears on host filesystem. Check permissions with `ls -la /results` showing drwxrwxrwx or equivalent writable permissions.",
+        "testStrategy": "VERIFIED 2026-02-22: COMPLETE in Dockerfile.isaaclab lines 14-15: RUN mkdir -p /results/videos/train /results/logs /results/checkpoints && chmod -R 777 /results. Test after Task 1: docker run --rm -v /tmp/test_results:/results isaac_automater touch /results/videos/train/test.mp4",
         "priority": "medium",
         "dependencies": [
           "3"
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:52:59.040Z"
+        "updatedAt": "2026-02-22T08:17:05.959Z"
       },
       {
         "id": "5",
         "title": "Update Dockerfile with Video Encoding Dependencies",
         "description": "Modify the isaac_automater Dockerfile to include ffmpeg and video codec libraries required for MP4 generation in Isaac Lab 2.3.1.",
         "details": "Update Dockerfile:\n```dockerfile\nFROM nvcr.io/nvidia/isaac-lab:2.3.1\n\n# Install video encoding dependencies\nRUN apt-get update && apt-get install -y \\\n    ffmpeg \\\n    libx264-dev \\\n    libx265-dev \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Copy automation script\nCOPY autorun.sh /isaaclab/autorun.sh\nRUN chmod +x /isaaclab/autorun.sh\n\n# Create results directory\nRUN mkdir -p /results/videos/train\n\nWORKDIR /isaaclab\nENTRYPOINT [\"/bin/bash\"]\n```\nBuild with tag `isaac_automater:latest`. Ensure compatibility with Isaac Lab's Omniverse dependencies.",
-        "testStrategy": "Build image: `docker build -t isaac_automater:latest .`. Verify ffmpeg installation: `docker run --rm isaac_automater ffmpeg -version`. Check that Isaac Lab Python environment has opencv-python and imageio packages installed (required for video recording).",
+        "testStrategy": "VERIFIED 2026-02-22: COMPLETE in Dockerfile.isaaclab lines 5-8: RUN apt-get update && apt-get install -y ffmpeg libx264-dev libx265-dev. Image was NEVER BUILT. After Task 1: docker build -f Dockerfile.isaaclab -t isaac_automater:latest . then docker run --rm isaac_automater ffmpeg -version",
         "priority": "high",
         "dependencies": [
           "4"
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:53:43.790Z"
+        "updatedAt": "2026-02-22T08:17:07.703Z"
       },
       {
         "id": "6",
         "title": "Test Headless Training Without Video Recording",
         "description": "Validate basic training execution in headless mode to ensure GPU acceleration and RL environment initialization work correctly before enabling video.",
         "details": "Run minimal test:\n```bash\ndocker run --rm --gpus all \\\n  -v $(pwd)/results:/results \\\n  isaac_automater:latest \\\n  python /isaaclab/scripts/reinforcement_learning/sb3/train.py \\\n  --task Isaac-Cartpole-v0 \\\n  --headless \\\n  --max_iterations 10\n```\nMonitor for CUDA initialization messages, environment creation logs, and SB3 policy network initialization. Check for 'Created TensorFlow device' or PyTorch CUDA device messages.",
-        "testStrategy": "Verify training starts without display errors. Confirm GPU utilization via `nvidia-smi` on host during execution. Check that checkpoint files or logs are created in /results. Training should complete 10 iterations without 'Display not found' or EGL/OpenGL errors.",
+        "testStrategy": "VERIFIED 2026-02-22: NOT COMPLETE - Depends on Tasks 1-5. After image transfer: docker run --rm --gpus all -v $(pwd)/results:/results isaac_automater python /isaaclab/scripts/reinforcement_learning/sb3/train.py --task Isaac-Cartpole-v0 --headless --max_iterations 10. Verify nvidia-smi shows GPU usage, check /results for logs.",
         "priority": "high",
         "dependencies": [
           "5"
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:54:08.861Z"
+        "updatedAt": "2026-02-22T08:17:09.459Z"
       },
       {
         "id": "7",
         "title": "Integrate Video Recording Pipeline",
         "description": "Enable camera and video recording functionality by configuring Isaac Lab's video recording flags and ensuring camera sensors are properly initialized.",
         "details": "Update autorun.sh to include video parameters:\n```bash\npython /isaaclab/scripts/reinforcement_learning/sb3/train.py \\\n  --task Isaac-Cartpole-v0 \\\n  --headless \\\n  --enable_cameras \\\n  --video \\\n  --video_length 200 \\\n  --video_interval 2000 \\\n  --max_iterations 500\n```\nEnsure Isaac Lab environment config has camera sensors enabled. For Cartpole, verify the task config includes camera observations. Set environment variable `OMNI_KIT_ACCEPT_EULA=YES` to prevent interactive prompts. If using EGL, set `PYOPENGL_PLATFORM=egl`.",
-        "testStrategy": "Run training for 50 iterations and verify 'Recording video' or 'Saving video' messages appear in logs. Check /results/videos/train/ for temporary frame files or video chunks during execution. Verify no 'Camera not found' errors in stderr.",
+        "testStrategy": "VERIFIED 2026-02-22: NOT COMPLETE - Depends on Tasks 1-6. autorun.sh contains correct flags: --enable_cameras --video --video_length 200 --video_interval 2000. After Task 6 success: docker run --gpus all -v $(pwd)/results:/results isaac_automater /isaaclab/autorun.sh (50 iters). Check logs for 'Recording video', verify /results/videos/train/*.mp4 exists.",
         "priority": "medium",
         "dependencies": [
           "6"
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:54:42.150Z"
+        "updatedAt": "2026-02-22T08:17:11.145Z"
       },
       {
         "id": "8",
         "title": "Execute Full Training Run with Video Capture",
         "description": "Run the complete 500-iteration training process with video recording enabled, monitoring for successful completion and resource utilization.",
         "details": "Execute:\n```bash\ndocker run --rm --gpus all \\\n  --name isaac_training \\\n  -v $(pwd)/results:/results \\\n  -e OMNI_KIT_ACCEPT_EULA=YES \\\n  isaac_automater:latest \\\n  /isaaclab/autorun.sh\n```\nMonitor with `docker logs -f isaac_training`. Watch for iteration counter (should reach 500/500), policy updates from SB3, and video encoding progress. Ensure container has sufficient shared memory (`--shm-size=16gb` if needed for video buffers).",
-        "testStrategy": "Verify process exits with code 0. Confirm training reaches exactly 500 iterations (check final log line: 'Iteration 500/500'). Monitor GPU memory usage stays within limits (Isaac Lab typically uses 4-8GB). Check that no OOM (Out of Memory) errors occur during video encoding phase.",
+        "testStrategy": "VERIFIED 2026-02-22: NOT COMPLETE - Depends on Tasks 1-7. After Task 7 success with 50 iters: docker run --rm --gpus all --name isaac_training -v $(pwd)/results:/results -e OMNI_KIT_ACCEPT_EULA=YES isaac_automater /isaaclab/autorun.sh. Verify exit code 0, check 'Iteration 500/500' in logs, monitor nvidia-smi for memory (4-8GB typical).",
         "priority": "high",
         "dependencies": [
           "7"
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:55:00.734Z"
+        "updatedAt": "2026-02-22T08:17:13.112Z"
       },
       {
         "id": "9",
         "title": "Validate MP4 Output and Video Integrity",
         "description": "Verify the generated MP4 file exists in /results/videos/train/, check video integrity, and confirm it contains the expected training visualization.",
         "details": "Check file existence: `ls -lh /results/videos/train/`. Verify MP4 format: `file /results/videos/train/*.mp4` should return 'MP4 (MPEG-4 Part 14)'. Check video metadata: `ffprobe -v error -select_streams v:0 -show_entries stream=width,height,duration -of csv=s=x:p=0 /results/videos/train/output.mp4`. Expected: width=1280/1920, height=720/1080, duration~6-8 seconds (200 frames at 30fps). Verify file size > 100KB (not empty/corrupted).",
-        "testStrategy": "Copy MP4 to local machine via SCP and play in video player to verify visual content shows Cartpole simulation. Check frame count matches --video_length (200 frames). Verify video codec is H.264 for compatibility. Ensure no encoding artifacts or green screens present.",
+        "testStrategy": "VERIFIED 2026-02-22: NOT COMPLETE - Depends on Task 8. After 500-iter run: ls -lh /results/videos/train/*.mp4, file /results/videos/train/*.mp4 (expect 'MP4'), ffprobe for duration~6-8s, size>100KB. SCP to local and play. Verify 200 frames, H.264 codec, no artifacts.",
         "priority": "medium",
         "dependencies": [
           "8"
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": [],
-        "updatedAt": "2026-02-21T15:55:04.679Z"
+        "updatedAt": "2026-02-22T08:17:14.818Z"
       },
       {
         "id": "10",
@@ -142,9 +142,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-21T15:55:08.050Z",
+      "lastModified": "2026-02-22T09:05:48.979Z",
       "taskCount": 10,
-      "completedCount": 10,
+      "completedCount": 3,
       "tags": [
         "master"
       ]
