@@ -1,0 +1,71 @@
+# PRD: Isaac Lab Training & Video Recording Automation
+
+## Project Goal
+Automate Isaac Lab reinforcement learning training and video recording within a sandboxed Docker environment on remote GPU hardware, ensuring a portable and reproducible setup.
+
+## Objective
+Run an Isaac Lab reinforcement learning training example inside a Docker container and record the training output to an MP4 file.
+
+## Environment & Constraints
+- **Remote Hardware**: All tests and modifications must be conducted on the remote machine `ssh xli4217@2-5880` (accessible via Tailscale).
+- **Sandboxing**: Work is strictly limited to the Docker image and its corresponding container. Do not modify the host system.
+- **Image Source**: The `isaac_automater` image is pre-built on `ssh xli4217@8-5880` and must be transferred to the target machine.
+- **Documentation**: Progress must be documented in `progress.md`.
+- **Infrastructure as Code**: The `Dockerfile` must be updated with all working modifications.
+- **Version Control**: Commit changes to Git whenever a problem is solved.
+
+## Current State
+
+### Completed Setup
+1. **Isaac Automator Docker Container**: Built successfully with tag `isaac_automator` (available on `8-5880`).
+2. **Isaac Lab Image**: Pulled `nvcr.io/nvidia/isaac-lab:2.3.1` from NGC registry.
+3. **AWS CLI**: Configured with access credentials.
+4. **NGC Authentication**: Working with API key.
+
+### Current Blocker
+**GPU Access Issue**: Local GPU access is blocked. Shifting execution to remote machine `2-5880`.
+
+## Requirements
+
+### Functional Requirements
+1. Run an Isaac Lab training example (e.g., Isaac-Cartpole-v0) in headless mode.
+2. Record the training output to MP4 format.
+3. Training should be automated via the `autorun.sh` script.
+4. Video output should be saved to the `/results` directory.
+
+### Technical Requirements
+- Use Isaac Lab 2.3.1 image.
+- Training script: `/isaaclab/scripts/reinforcement_learning/sb3/train.py`.
+- Video recording flags: `--headless --enable_cameras --video --video_length 200 --video_interval 2000`.
+- Training task: `Isaac-Cartpole-v0`.
+- Max iterations: 500.
+- Video output directory: `/results/videos/train/`.
+
+## Architecture
+
+### System Components
+1. **Isaac Automator Container**: Orchestration and deployment management on `2-5880`.
+2. **Isaac Lab Container**: Simulation and training environment (GPU-accelerated).
+3. **Remote Machine (2-5880)**: Target GPU host.
+4. **autorun.sh Script**: Automated startup script for training.
+
+### Data Flow
+```
+Remote Machine (2-5880)
+  → Launch Isaac Lab Container 
+    → Execute autorun.sh 
+      → Run training with video recording 
+        → Save MP4 to /results
+```
+
+## Implementation Approach
+
+1. **Image Transfer**: Export `isaac_automater` from `8-5880` and import it on `2-5880`.
+2. **Container Setup**: Launch the container on `2-5880` with GPU access.
+3. **Execution**: Run the training script via `autorun.sh`.
+4. **Validation**: Verify MP4 generation in the `/results` directory.
+
+## Success Criteria
+1. Training runs successfully for 500 iterations.
+2. MP4 video file is generated and accessible.
+3. Process is repeatable and fully documented in `progress.md` and `Dockerfile`.

@@ -1,0 +1,29 @@
+# Dockerfile for Isaac Lab Training with Video Recording
+# Based on NVIDIA Isaac Lab container with custom automation
+
+FROM nvcr.io/nvidia/isaac-lab:2.3.0
+
+# Install video encoding dependencies (already included in Isaac Lab but ensure they're present)
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libx264-dev \
+    libx265-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy automation script to container
+COPY scripts/autorun.sh /isaaclab/autorun.sh
+RUN chmod +x /isaaclab/autorun.sh
+
+# Create results directory with proper permissions
+RUN mkdir -p /results/videos/train /results/logs /results/checkpoints && \
+    chmod -R 777 /results
+
+# Set working directory
+WORKDIR /isaaclab
+
+# Set environment variables for headless operation
+ENV CUDA_VISIBLE_DEVICES=0
+ENV ACCEPT_EULA=Y
+ENV OMNI_ENV_PRIVACY_CONSENT=1
+
+ENTRYPOINT ["/bin/bash"]
